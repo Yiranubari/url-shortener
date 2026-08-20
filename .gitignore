@@ -51,3 +51,5 @@ docker-compose.override.yml
 *.sqlite3
 
 instruct.txt
+generate_docx.py
+URL_Shortener_Project_Documentation.docx
