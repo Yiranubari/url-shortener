@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.shortcode import generate_short_code
+from app.exceptions import ShortCodeAllocationError, ShortURLNotFoundError
 from app.models.url import URL
 
 
@@ -24,38 +25,47 @@ class URLService:
             if parts.password is not None:
                 userinfo += ":" + parts.password
             netloc = userinfo + "@" + netloc
-        if parts.port is not None:
+        default_port = {"http": 80, "https": 443}.get(parts.scheme)
+        if parts.port is not None and parts.port != default_port:
             netloc += ":" + str(parts.port)
         path = parts.path.rstrip("/")
         return urlunsplit((parts.scheme, netloc, path, parts.query, ""))
 
-    def _find_by_long_url(self, long_url: str) -> URL | None:
-        return self.db.query(URL).filter(URL.long_url == long_url).first()
+    def _find_by_normalized_url(self, normalized_url: str) -> URL | None:
+        return self.db.query(URL).filter(
+            URL.normalized_url == normalized_url
+        ).first()
 
     def create_short_url(self, raw_url: str) -> URL:
         """Returns the existing row or creates a new short URL."""
-        long_url = self.normalize_url(raw_url)
-        existing = self._find_by_long_url(long_url)
+        normalized_url = self.normalize_url(raw_url)
+        existing = self._find_by_normalized_url(normalized_url)
         if existing:
             return existing
         for _ in range(self.MAX_ATTEMPTS):
             short_code = generate_short_code()
-            url = URL(short_code=short_code, long_url=long_url)
+            url = URL(
+                short_code=short_code,
+                long_url=raw_url,
+                normalized_url=normalized_url,
+            )
             self.db.add(url)
             try:
                 self.db.commit()
             except IntegrityError:
                 self.db.rollback()
-                existing = self._find_by_long_url(long_url)
+                existing = self._find_by_normalized_url(normalized_url)
                 if existing:
                     return existing
                 continue
             self.db.refresh(url)
             return url
-        raise RuntimeError("could not allocate a unique short code")
+        raise ShortCodeAllocationError()
 
-    def get_url_by_short_code(self, short_code: str) -> URL | None:
-        """Looks up a URL row by short code."""
-        return self.db.query(URL).filter(URL.short_code == short_code).first()
+    def get_url_by_short_code(self, short_code: str) -> URL:
+        url = self.db.query(URL).filter(URL.short_code == short_code).first()
+        if url is None:
+            raise ShortURLNotFoundError(short_code)
+        return url
 
 
