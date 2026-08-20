@@ -70,6 +70,12 @@ def test_redirect_missing_returns_404(client):
     assert r.json() == {"detail": "Short URL not found"}
 
 
+def test_reserved_path_not_treated_as_short_code(client):
+    r = client.get("/shorten", follow_redirects=False)
+    assert r.status_code == 404
+    assert r.json() == {"detail": "Short URL not found"}
+
+
 def test_rate_limit_headers_present(client):
     r = client.post("/shorten", json={"url": "https://example.com/x"})
     assert r.status_code == 200

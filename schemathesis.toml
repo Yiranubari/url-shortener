@@ -1,0 +1,41 @@
+# Schemathesis configuration for the URL shortener API.
+# Docs: https://schemathesis.readthedocs.io/
+# Run via: scripts/schemathesis.sh
+#
+# This file is auto-discovered by `st` when run from the project root.
+# Values here can be overridden on the command line.
+
+base-url = "http://127.0.0.1:8011"
+workers = 1
+
+# Default checks: crash-free operation and OpenAPI conformance.
+[checks]
+not_a_server_error = {}
+status_code_conformance = {}
+content_type_conformance = {}
+response_schema_conformance = {}
+# The API uses a catch-all GET /{short_code} route, so requests with
+# undeclared methods to known static paths (e.g. GET /shorten) resolve to a
+# short-code lookup and return 404 ("no such short URL") rather than 405.
+# This is intentional: the catch-all treats every unknown segment uniformly.
+unsupported_method = { enabled = false }
+
+[generation]
+# Examples generated per API operation.
+max-examples = 100
+# Avoid generating control characters in strings.
+allow-x00 = false
+
+[phases]
+# No Link headers / resource interlinks in this API, so stateful chaining
+# adds little value and slows the run down. Enable it if that changes.
+stateful = { enabled = false }
+
+[phases.examples]
+enabled = true
+
+[phases.coverage]
+enabled = true
+
+[phases.fuzzing]
+enabled = true

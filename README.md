@@ -172,6 +172,16 @@ Create a short URL.
 - `long_url` is the original URL exactly as submitted.
 - `short_code` is the 7-character base62 code.
 
+**Response 400** (malformed JSON body)
+
+```json
+{
+  "detail": "There was an error parsing the body"
+}
+```
+
+Returned when the request body is not valid JSON.
+
 **Response 422** (validation error)
 
 ```json
@@ -220,6 +230,10 @@ Redirects to the original URL. The HTTP method is preserved (the browser stays o
 ```
 
 Returned when the short code does not exist in the database.
+
+Reserved path segments (currently only `shorten`) are never treated as short
+codes: `GET /shorten` returns 404 just like any other unknown code, so the
+static `POST /shorten` endpoint is never shadowed by the catch-all route.
 
 **Response 429**
 
@@ -337,22 +351,66 @@ The test suite covers:
 - Shortcode generator (length, alphabet, uniqueness).
 - URL normalization (8 parametrized cases covering case, trailing slash, default port, custom port, fragment, query, userinfo, IPv6).
 - URL creation, deduplication, and collision exhaustion at the service layer.
-- API endpoints: health check, shorten, deduplication, normalized variant deduplication, invalid URL rejection, oversized URL rejection, redirect, 404 for missing code, rate limit headers, and 429 enforcement for both routes.
+- API endpoints: health check, shorten, deduplication, normalized variant deduplication, invalid URL rejection, oversized URL rejection, redirect, 404 for missing code, reserved path handling, rate limit headers, and 429 enforcement for both routes.
+
+## Property-Based Testing (Schemathesis)
+
+Schemathesis generates property-based tests from the live OpenAPI schema and
+exercises the API with automatically produced inputs, checking that the API
+never crashes and that every response conforms to the documented schema.
+
+It is pre-configured in `schemathesis.toml`:
+
+- Checks: `not_a_server_error`, `status_code_conformance`,
+  `content_type_conformance`, and `response_schema_conformance`.
+- `unsupported_method` is disabled deliberately: the API uses a catch-all
+  `GET /{short_code}` route, so requests with undeclared methods on known
+  static paths (e.g. `GET /shorten`) resolve to a short-code lookup and return
+  404 rather than 405. The catch-all treats every unknown segment uniformly.
+- Fuzzing runs 100 generated examples per operation. The stateful phase is
+  disabled (no Link-header chaining in this API).
+
+Run it with:
+
+```
+scripts/schemathesis.sh
+```
+
+The script starts the API on a throwaway port (8011 by default) against the
+test database with rate limiting disabled, waits for the OpenAPI schema, runs
+`schemathesis`, then shuts the server down. Override the port, host, or database
+via `SCHEMATHESIS_PORT`, `SCHEMATHESIS_HOST`, and `TEST_DATABASE_URL`.
+
+To run a quick subset instead of the full fuzzing run, pass extra arguments
+through to the CLI:
+
+```
+scripts/schemathesis.sh --max-examples 20
+```
+
+A clean run reports a passing summary. Two informational warnings are expected
+and are consequences of the URL-shortener design:
+
+- `Missing valid test data`: generated short codes do not exist yet, so
+  `GET /{short_code}` returns 404 for most generated inputs.
+- `Schema validation mismatch`: same root cause, phrased as a generation hint.
 
 ## Configuration
 
 All configuration is in the .env file. The Settings class in app/core/config.py reads from .env using pydantic-settings.
 
-| Variable     | Default               | Description                                         |
-| ------------ | --------------------- | --------------------------------------------------- |
-| DATABASE_URL | (required)            | PostgreSQL connection string.                       |
-| BASE_URL     | http://localhost:8000 | Base URL used to construct the short link response. |
+| Variable           | Default               | Description                                                  |
+|--------------------|-----------------------|--------------------------------------------------------------|
+| DATABASE_URL       | (required)            | PostgreSQL connection string.                                |
+| BASE_URL           | http://localhost:8000 | Base URL used to construct the short link response.          |
+| RATE_LIMIT_ENABLED | true                  | Set to false to disable rate limiting (used by schemathesis).|
 
 Example .env file:
 
 ```
 DATABASE_URL=postgresql+psycopg2://url_shortener:url_shortener@localhost:5433/url_shortener
 BASE_URL=http://localhost:8000
+RATE_LIMIT_ENABLED=true
 ```
 
 For tests, the DATABASE_URL is overridden by the TEST_DATABASE_URL environment variable. If not set, it defaults to the same host and port with database `url_shortener_test`.
