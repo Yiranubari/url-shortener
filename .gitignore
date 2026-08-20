@@ -49,7 +49,3 @@ docker-compose.override.yml
 # Database (if using sqlite locally for quick testing)
 *.db
 *.sqlite3
-
-instruct.txt
-generate_docx.py
-URL_Shortener_Project_Documentation.docx
