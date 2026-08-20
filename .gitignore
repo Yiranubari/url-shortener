@@ -48,3 +48,5 @@ docker-compose.override.yml
 # Database (if using sqlite locally for quick testing)
 *.db
 *.sqlite3
+
+instruct.txt

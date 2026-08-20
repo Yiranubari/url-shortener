@@ -1,0 +1,11 @@
+fastapi==0.136.1
+uvicorn[standard]==0.46.0
+sqlalchemy==2.0.52
+psycopg2-binary==2.9.12
+alembic==1.19.1
+pydantic-settings==2.14.0
+slowapi==0.1.10
+loguru==0.7.3
+httpx==0.28.1
+pytest==9.1.1
+
